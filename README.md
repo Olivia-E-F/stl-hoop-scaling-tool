@@ -47,6 +47,9 @@ numpy
 ## Project Structure
 
 stl-hoop-scaling-tool
-├── scale_hoop.py
+
+├── scale_hoop.
+
 ├── requirements.txt
+
 ├── .gitignore
