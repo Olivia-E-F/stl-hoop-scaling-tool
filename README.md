@@ -1,6 +1,6 @@
 # STL Hoop Scaling Tool
 
-A small Python utility for selectively scaling only the hoop section of a wall-mounted ball holder STL file, without altering the mounting base or connection points.
+This script scales down only the hoop part of the wall mount STL. The mounting base and connection points stay the same.
 
 ## Overview
 
