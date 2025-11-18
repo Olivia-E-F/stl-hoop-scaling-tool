@@ -1,0 +1,28 @@
+# ------------------------------------------
+# Python virtual environment
+# ------------------------------------------
+.venv/
+
+# ------------------------------------------
+# Python cache files
+# ------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+
+# ------------------------------------------
+# VS Code settings (optional but common)
+# ------------------------------------------
+.vscode/
+
+# ------------------------------------------
+# Output STL files (OPTIONAL)
+# Ignore generated STL files created by the script
+# Remove these lines if you want to commit STLs
+# ------------------------------------------
+*.stl
+
+# ------------------------------------------
+# macOS junk files
+# ------------------------------------------
+.DS_Store
