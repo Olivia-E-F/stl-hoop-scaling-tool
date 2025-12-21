@@ -70,22 +70,29 @@ def scale_hoop_region(data, x_cut=20.0, z_cut=130.0, scale=1.0):
     y = verts[:, 1]
     z = verts[:, 2]
 
-    # Mask selecting only vertices in the hoop region
-    mask = (x < x_cut) & (z >= z_cut)
+    # ** CHANGED: snapshot vertices for proof of movement
+    verts_before = verts.copy()  # **
 
-    # Mask cannot be empty for scaling
-    if not np.any(mask):
-        print("Warning: hoop mask caught no vertices.")
-        return 0, np.nan, np.nan, np.nan, np.nan
+    # ** CHANGED: estimate true hoop center via least-squares circle fit
+    A = np.column_stack([2*y, 2*z, np.ones_like(y)])  # **
+    b = y*y + z*z                                    # **
+    cy, cz, _ = np.linalg.lstsq(A, b, rcond=None)[0] # **
+
+
+    # ** CHANGED: radial distance in hoop plane (Y–Z)
+    r = np.sqrt((y - cy)**2 + (z - cz)**2)  # **
+
+    # ** CHANGED: select outer radial band instead of axis-aligned box
+    r_thresh = np.percentile(r, 85)  # ** outer rim band
+    mask = r >= r_thresh  # **
+
+    # ** CHANGED: mask must not be empty — fail hard
+    if not np.any(mask):  # **
+        raise RuntimeError("Hoop mask caught ZERO vertices — aborting.")  # **
 
     # Copy original hoop vertices BEFORE scaling
     orig_y = y[mask].copy()
     orig_z = z[mask].copy()
-
-    # Use bounding box midpoint for stable center
-    # These are the points we scale *around*
-    cy = 0.5 * (orig_y.min() + orig_y.max())
-    cz = 0.5 * (orig_z.min() + orig_z.max())
 
     orig_dist = np.sqrt((orig_y - cy)**2 + (orig_z - cz)**2)
     orig_radius = orig_dist.mean()
@@ -100,6 +107,14 @@ def scale_hoop_region(data, x_cut=20.0, z_cut=130.0, scale=1.0):
 
     # Put modified vertices back into the structured array shape
     data["verts"] = verts.reshape(data["verts"].shape)
+
+    # ** CHANGED: PROOF — count how many vertices actually moved
+    delta = np.linalg.norm(verts - verts_before, axis=1)  # **
+    moved = np.count_nonzero(delta > 1e-6)  # **
+    print(f"[DEBUG] Vertices moved: {moved}")  # **
+
+    # ** CHANGED: refuse silent failure
+    assert moved > 0, "No vertices moved — geometry unchanged"  # **
 
     # Return how many points we changed + center used
     return mask.sum(), cy, cz, orig_radius, new_radius
