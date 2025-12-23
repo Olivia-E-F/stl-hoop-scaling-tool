@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 # ---------------------------------
-# STL IO (read-only)
+# STL IO (read or write)
 # ---------------------------------
 
 def read_binary_stl(path):
@@ -35,6 +35,19 @@ def read_binary_stl(path):
 
     # Flatten triangle vertices so each row is a single 3D point
     return data["verts"].reshape(-1, 3)
+
+def write_binary_stl(path, header, triangles):
+    with open(path, "wb") as f:
+        # Header is exactly 80 bytes
+        if len(header) < 80:
+            header = header + b" " * (80 - len(header))
+        f.write(header[:80])
+
+        # Number of triangles
+        f.write(struct.pack("<I", len(triangles)))
+
+        # Write triangle data as is
+        triangles.tofile(f)
 
 
 # ---------------------------------
