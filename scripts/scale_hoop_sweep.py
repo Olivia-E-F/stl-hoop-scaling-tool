@@ -145,6 +145,42 @@ def compute_scaled_radii(verts, centerline, tangents, scale):
 
     return r_orig, r_new, r_mean
 
+# ---------------------------------
+# Apply scaling to vertices
+# ---------------------------------
+
+def apply_scaled_vertices(verts, centerline, tangents, r_orig, r_new):
+    slice_idx = associate_vertices_to_slices(verts, centerline)
+    # each vertex has a local frame defined by centerline slice
+
+    verts_new = verts.copy() # for later comarisons 
+
+    for i in range(len(verts)):
+        s = slice_idx[i]
+
+        center = centerline[s]
+        tangent = tangents[s]
+
+        d = verts[i] - center
+
+        # split into sweep and cross-section components
+        # projection of d onto tangent: d_parallel = (d · T_s) T_s
+        d_parallel = np.dot(d, tangent) * tangent
+        # perpendicular component in normal plane: d_perp = d - d_parallel
+        d_perp = d - d_parallel
+
+        # scale factor to map |d_perp| = r_orig -> r_new
+        if r_orig[i] > 0:
+            scale_factor = r_new[i] / r_orig[i]
+        else:
+            scale_factor = 1.0
+
+        # scaled perpendicular component: d_perp' = scale * d_perp
+        d_perp_new = d_perp * scale_factor
+        # reconstructed vertex: V' = C_s + d_parallel + d_perp'
+        verts_new[i] = center + d_parallel + d_perp_new
+        
+    return verts_new
 
 
 # ---------------------------------
