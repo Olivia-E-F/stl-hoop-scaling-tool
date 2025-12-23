@@ -124,16 +124,46 @@ def local_radius(vertex, center, tangent):
 # Vertex association and scaling math (diagnostic)
 # ---------------------------------
 
+## Associate verts to slices
+## Slice IDX, Vertex -> slice mapping
+## Build per slice Scale profile
+## Compute Scaled Radii in local frames
+
 def associate_vertices_to_slices(verts, centerline):
+    # centerline defines a 1D parameterization of the sweep (ordered along X)
     x_centers = centerline[:, 0]
     x_verts = verts[:, 0]
 
-    # Nearest-slice association based on X is sufficient for a monotonic sweep
+    # Foreach Vertex, find index of nearest centerline slice in X
+    # Establish mapping, vertex i -> slice s
+    # Nearest-slice association based on X for monotonic sweep
     idx = np.searchsorted(x_centers, x_verts) # idx[i]=s  vertex i uses s's center+tan
+
+    # valid slice range ensures every vertex is referencing an exising centerline frame
     return np.clip(idx, 0, len(x_centers) - 1) # no val negative or outside of slice
 
+# add a per slice scale fn to ramp from the mount, defining scaling at each triangle
+def build_scale_profile(centerline, target_scale, ramp_start, ramp_end):
+    # scale_profile[s] = effective scale applied at slice s
+    scale_profile = np.ones(len(centerline))
 
-def compute_scaled_radii(verts, centerline, tangents, scale):
+    for s in range(len(centerline)):
+        if s <= ramp_start:
+            # mount region: no scale
+            scale_profile[s] = 1.0
+        elif s >= ramp_end:
+            # hoop region: full scale
+            scale_profile[s] = target_scale
+        else:
+            # transition region:
+            #   linear interpolation between 1.0 and target_scale
+            t = (s - ramp_start) / (ramp_end - ramp_start)
+            scale_profile[s] = 1.0 + t * (target_scale - 1.0)
+
+    return scale_profile
+
+def compute_scaled_radii(verts, centerline, tangents, scale_profile):
+    # Associate every vertex with a sweep slice, operations are local/slice
     slice_idx = associate_vertices_to_slices(verts, centerline)
 
     r_orig = np.zeros(len(verts))
@@ -162,7 +192,8 @@ def compute_scaled_radii(verts, centerline, tangents, scale):
 
     for i in range(len(verts)):
         s = slice_idx[i]
-        r_new[i] = r_mean[s] + scale * (r_orig[i] - r_mean[s])
+        scale_eff = scale_profile[s]
+        r_new[i] = r_mean[s] + scale_eff * (r_orig[i] - r_mean[s])
 
     return r_orig, r_new, r_mean
 
@@ -205,36 +236,68 @@ def apply_scaled_vertices(verts, centerline, tangents, r_orig, r_new):
 
 
 # ---------------------------------
-# Main (diagnostics only)
+# Main
 # ---------------------------------
 
 def main():
     repo_root = Path(__file__).resolve().parents[1]
-    stl_path = repo_root / "data" / "original" / "Sports_Ball_Wall_Mount.stl"
+    in_path = repo_root / "data" / "original" / "Sports_Ball_Wall_Mount.stl"
+    out_path = repo_root / "outputs" / "sweep" / "hoop_3.50in_sweep_ramped.stl"
 
-    verts = read_binary_stl(stl_path)
+    # Read STL while preserving triangle structure for write-back
+    header, triangles, verts = read_binary_stl(in_path)
 
+    # Construct sweep parameterization
     centerline = extract_centerline(verts, x_bins=200)
     tangents = compute_tangents(centerline)
 
-    scale = 0.574  # same target scale as radial experiments
+    # Scaling parameters
+    target_scale = 0.574
+    ramp_start = 20
+    ramp_end = 50
 
+    # Per-slice scaling control
+    scale_profile = build_scale_profile(
+        centerline,
+        target_scale,
+        ramp_start,
+        ramp_end
+    )
+
+    # Compute local radii before/after scaling
     r_orig, r_new, r_mean = compute_scaled_radii(
         verts,
         centerline,
         tangents,
-        scale
+        scale_profile
     )
 
-    print("\n[DIAGNOSTIC]")
-    print(f"Original radius: min={r_orig.min():.2f}, max={r_orig.max():.2f}")
-    print(f"Scaled radius:   min={r_new.min():.2f}, max={r_new.max():.2f}")
+    # Apply scaling in local frames
+    verts_scaled = apply_scaled_vertices(
+        verts,
+        centerline,
+        tangents,
+        r_orig,
+        r_new
+    )
 
-    # Spot-check a few slices along the sweep
-    for s in [50, 100, 150]:
-        print(f"\n[SLICE {s}]")
-        print(f"  mean radius = {r_mean[s]:.2f}")
+    # Reassemble triangles with updated vertices
+    triangles_scaled = triangles.copy()
+    triangles_scaled["verts"] = verts_scaled.reshape(triangles["verts"].shape)
 
+    # Ensure output directory exists
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write final STL
+    write_binary_stl(out_path, header, triangles_scaled)
+
+    print("\n[WRITE]")
+    print(f"Wrote STL to: {out_path}")
+
+
+# ---------------------------------
+# Entrypoint
+# ---------------------------------
 
 if __name__ == "__main__":
     main()
