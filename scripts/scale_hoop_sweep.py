@@ -21,34 +21,42 @@ from pathlib import Path
 
 def read_binary_stl(path):
     # Binary STL layout is fixed: header + triangle count + triangle records
+    # needs to preserve tri structure
     with open(path, "rb") as f:
-        f.read(80)  # header is unused but must be consumed
-        tri_count = struct.unpack("<I", f.read(4))[0]
+        header = f.read(80)  # raw header bytes
+        tri_count = struct.unpack("<I", f.read(4))[0] # num of triangles
 
+        # Triangle struct-- fixed wrt STL specs
         tri_dtype = np.dtype([
             ("normal", np.float32, (3,)),
             ("verts",  np.float32, (3, 3)),
             ("attr",   np.uint16)
         ])
+        # keep tri struct intact st we can write STL back
+        triangles = np.fromfile(f, dtype=tri_dtype, count=tri_count)
 
-        data = np.fromfile(f, dtype=tri_dtype, count=tri_count)
-
+    # flatten verts for geom process.
+    # tri grouping is preserved in triangles
+    verts = triangles["verts"].reshape(-1, 3)
     # Flatten triangle vertices so each row is a single 3D point
-    return data["verts"].reshape(-1, 3)
+    # we need to return triangles and verts
+    return header, triangles, verts 
 
 def write_binary_stl(path, header, triangles):
+    # Writing req original triangle structure st
+    # topo is consistent, tri order is preserved, 
+    # identical slicer behavior later on
     with open(path, "wb") as f:
         # Header is exactly 80 bytes
         if len(header) < 80:
             header = header + b" " * (80 - len(header))
         f.write(header[:80])
 
-        # Number of triangles
+        # Number of triangles needs to match tri records written
         f.write(struct.pack("<I", len(triangles)))
 
-        # Write triangle data as is
+        # Write triangle data as is minus vertex positions, norms unchanged
         triangles.tofile(f)
-
 
 # ---------------------------------
 # Centerline extraction
